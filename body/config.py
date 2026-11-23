@@ -7,7 +7,7 @@ HERE = Path(__file__).resolve().parent
 
 
 # ---- ハンガーと保存先 ----
-HANGER_COUNT = 20                       # ESP32 側の HANGER_COUNT と同じにする
+HANGER_COUNT = 20                       # esp32/hanger_esp32/bt_command.h の HANGER_COUNT と同じにする
 DATA_FILE = HERE / "data" / "people.json"
 
 
@@ -26,7 +26,7 @@ SHOULDER_MAX_CM = 80.0
 # "bt"   : Bluetooth で ESP32 に送る
 MACHINE_MODE = "print"
 
-# ESP32 の無線シリアルポート。ラズパイでは rfcomm bind で作る（README 参照）
+# ESP32 の無線シリアルポート。ラズパイでは rfcomm bind で作る（docs/setup-esp32.md 参照）
 BT_PORT = "/dev/rfcomm0"
 BT_BAUD = 9600           # Bluetooth のポートでは実質使われない
 BT_ACK_TIMEOUT = 3.0     # 秒。ESP32 から OK が返るまで待つ時間
