@@ -1,22 +1,26 @@
-# ハンガー管理システム（第3版：ラズパイ5 1台・1つのプログラム）
+# ハンガー管理システム
+
+カメラの前に立つと、肩幅と顔を測ってハンガーを割り当てます。あとから名前か顔で、その人のハンガーを機械が取り出します。
+ハンガーには重さを測るしくみも付け、服が乾いたかどうかを判定する予定です。
 
 ## 全体の形
 
 ```
-          ラズパイ5（python3 run.py で 1 つのプログラムとして動く）
- ┌──────────────────────────────────────────────────────┐
- │  画像処理 vision/vision.py     本体 body/              │
- │  ┌─────────────────┐        ┌─────────────────┐       │  Bluetooth   ┌────────┐
- │  │ measure(         │ ◀─呼ぶ─ │ main.py         │       │  Classic     │ ESP32  │
- │  │  want_shoulder,  │        │ store.py        │ ─GET:3────────────▶ │（無印）│
- │  │  known)          │ ─dict─▶ │ machine.py      │ ◀─OK:GET:3──────── │        │
- │  └─────────────────┘        └─────────────────┘       │              └────────┘
- │   カメラ・AI・顔の照合           登録・検索・保存・操作      │
- └──────────────────────────────────────────────────────┘
+           ラズパイ5（python3 run.py で 1 つのプログラムとして動く）
+ ┌────────────────────────────────────────────────┐
+ │  画像処理 vision/            本体 body/            │                  ESP32（無印）1 台
+ │  ┌────────────────┐       ┌────────────────┐   │   Bluetooth     ┌──────────────────┐
+ │  │ measure(        │ ◀呼ぶ─ │ 登録・検索・保存 │   │   Classic       │ 命令の受け取り   │
+ │  │  want_shoulder, │       │ 機械への命令    │ ──GET:3──────────▶ │ モーター         │
+ │  │  known)         │ ─dict▶ │                │ ◀─OK:GET:3─────── │ 重量計測・乾燥判定│
+ │  └────────────────┘       └────────────────┘   │                  └──────────────────┘
+ │   カメラ・肩幅・顔の照合                             │
+ └────────────────────────────────────────────────┘
 ```
 
-画像処理と本体は同じラズパイの同じプログラムの中で動きます。サーバーは使いません。
-それでも、お互いの約束は **`measure` 関数 1 つと、やりとりする dict の形だけ**（PROTOCOL.md）です。
+- 画像処理と本体は、同じラズパイの同じプログラムの中で動きます。サーバーは使いません
+- 画像処理と本体の約束は、`measure` 関数 1 つと、やりとりする dict の形だけです（[PROTOCOL.md](PROTOCOL.md)）
+- ラズパイと ESP32 の約束は、`PING` / `GET` / `PUT` の短い命令だけです（[docs/esp32-commands.md](docs/esp32-commands.md)）
 
 ## まず動かす（カメラも ESP32 もなしで試せる）
 
@@ -27,171 +31,131 @@ python run.py
 ```
 
 最初は仮の画像処理（`tools/fake_vision.py`）と、画面に表示するだけの機械（`MACHINE_MODE = "print"`）になっているので、追加のライブラリなしで Windows でも動きます。
+`reg 田中` と打つと「カメラの前にいる人の名前」を聞いてくるので、名前を入れて試します。ほかに `get` / `face` / `del` / `list` / `quit` が使えます。
 
-チームでの進め方（ブランチ・PR のルール）は [CONTRIBUTING.md](CONTRIBUTING.md)、処理の流れは [FLOW.md](FLOW.md) にあります。
+---
 
-## フォルダと担当
+## ファイル構造
 
 ```
 Hanger-system-forAll/
+├─ README.md              ← この案内
+├─ CONTRIBUTING.md        ← チームでの進め方（ブランチ・PR・担当・守ること）
+├─ PROTOCOL.md            ← 画像処理と本体の約束（measure 関数）
+├─ FLOW.md                ← 処理の流れ（図）
 ├─ run.py                 ← 起動用（python3 run.py）
-├─ PROTOCOL.md            ← 画像処理と本体の約束（これだけを共有する）
-├─ FLOW.md                ← 処理の流れ
-├─ CONTRIBUTING.md        ← チームでの進め方
-├─ body/                  ← 本体担当
+│
+├─ body/                  ← 本体（ラズパイ）
 │   ├─ main.py            コマンド（reg / get / face / del / list / quit）
-│   ├─ config.py          本体の設定（ハンガー数・保存先・画像処理のファイル・Bluetooth）
-│   ├─ store.py           登録・検索・保存（顔は中身を見ずに預かるだけ）
+│   ├─ config.py          設定（ハンガー数・保存先・どの画像処理を使うか・機械のつなぎ方）
+│   ├─ store.py           登録・検索・保存（顔のデータは中身を見ずに預かるだけ）
 │   ├─ vision_client.py   画像処理のファイルを読み込み、measure を呼ぶ窓口
-│   ├─ machine.py         ESP32 へ命令を送る（自動でつなぎ直す）
-│   └─ requirements.txt   pyserial
-├─ vision/                ← 画像処理担当（中身は自由に作り替えてよい）
+│   ├─ machine.py         ESP32 へ命令を送る（切れたら自動でつなぎ直す）
+│   ├─ requirements.txt   必要なライブラリ（pyserial）
+│   └─ data/              登録データ（自動でできる。個人情報なので Git には入れない）
+│
+├─ vision/                ← 画像処理（ラズパイ）。中身は自由に作り替えてよい
 │   ├─ vision.py          本物の見本（YOLO で肩、YuNet + SFace で顔）
-│   ├─ models/            ONNX モデルを置く
-│   └─ requirements.txt   numpy / opencv-python / ultralytics
-├─ tools/
-│   ├─ fake_vision.py     仮の画像処理（カメラなし・標準ライブラリだけ）
-│   ├─ check_vision.py    画像処理が約束どおりか確かめる（標準ライブラリだけ）
+│   ├─ models/            モデルファイルを置く（各自で用意。Git には入れない）
+│   └─ requirements.txt   必要なライブラリ（numpy / opencv-python / ultralytics）
+│
+├─ esp32/                 ← ハンガー側の ESP32 1 台
+│   ├─ hanger_esp32/      本番用。このフォルダ全体を 1 つのプログラムとして書き込む
+│   │   ├─ hanger_esp32.ino   全体の setup / loop。各担当の関数を呼ぶだけ
+│   │   ├─ pins.h             使うピンの一覧（GPIO4・5 は重量計測用）
+│   │   ├─ bt_command.cpp/.h  ラズパイからの命令を受けて返事をする
+│   │   ├─ motor.cpp/.h       ハンガーを動かす（今は LED で代用）
+│   │   └─ weight.cpp/.h      重さを測って乾燥を判定する（まだ空）
+│   └─ tests/             部品を 1 つずつ試すための別のスケッチ
+│       └─ drying_motor_test/   乾燥完了と仮定して、モーターを 1 回だけ動かす
+│
+├─ tools/                 ← 開発用の道具（Python 標準ライブラリだけで動く）
+│   ├─ fake_vision.py     仮の画像処理（カメラなしで本体を試す）
+│   ├─ check_vision.py    画像処理が PROTOCOL.md どおりか確かめる
 │   └─ bt_test.py         ラズパイ ⇔ ESP32 の通信だけを手で試す
-└─ esp32/hanger_esp32/hanger_esp32.ino   ESP32：命令を受けて返事をし、動かす（今は LED で代用）
+│
+└─ docs/                  ← 詳しい手順と決まりごと
+    ├─ setup-raspi.md     ラズパイ5の準備（ライブラリ・モデル・カメラの校正）
+    ├─ setup-esp32.md     ESP32 の準備（書き込み・ペアリング・通信の確認）
+    ├─ esp32-commands.md  ラズパイ ⇔ ESP32 の命令の決まり
+    └─ history.md         前の版からの変更
 ```
 
-- 画像処理は本体のファイルを import しません。本体は画像処理の `measure` 以外に触りません
-- 本体はパッケージ（`body.`〇〇）になっているので、画像処理側に `config.py` などの同じ名前のファイルがあってもぶつかりません
-- どの画像処理を使うかは `body/config.py` の `VISION_FILE` で選びます（仮 ⇔ 本物の切り替えはここだけ）
+---
 
-## 前の版から減った約束
+## 担当ごとに見るところ
 
-| 第1版で必要だった約束 | 今の版 |
+### 本体担当
+
+| 主に触るファイル | `body/` の全部、`esp32/hanger_esp32/bt_command.cpp/.h` |
 |---|---|
-| 画像処理が本体の `vision_api.py` を import する | 何も import しない（共有ファイルなし） |
-| 定数4つ（API_VERSION, FACE_DIM, FACE_MODEL_ID, しきい値）を持つ | 不要 |
-| 関数3つ（open_vision / capture / close_vision）を作る | `measure` 1 つだけ。準備・片付けは画像処理が自分でする |
-| Measurement クラスを使って返す | ふつうの dict |
-| 顔は128個の小数・長さ1にそろえる | 形は自由。本体は中身を見ない |
-| 本体が内積で顔を比べ、しきい値で判定する | 画像処理が判定して `match` で返す |
-| 本体がモデルの違いを検知して顔検索を止める | 画像処理が古い顔を照合から外し、`note` で知らせる |
-| エラーの種類を4つのコードで返す | 利用者向けの文を返すか、例外を投げるだけ |
+| まず読む | [PROTOCOL.md](PROTOCOL.md)、[FLOW.md](FLOW.md)、[docs/esp32-commands.md](docs/esp32-commands.md) |
+| 試し方 | `python run.py`（仮の画像処理で動く） |
 
-画像処理が例外を投げても、変な値を返しても、本体は「測定失敗」と表示して動き続けます。
+- 画像処理の中身には触りません。使うのは `measure` 関数だけです
+- 顔のデータ（`face`）は中身を見ずに保存するだけです
 
-## ラズパイ5での準備
+### 画像処理担当
 
-### 1. ライブラリ
+| 主に触るファイル | `vision/` の全部 |
+|---|---|
+| まず読む | [PROTOCOL.md](PROTOCOL.md)、[docs/setup-raspi.md](docs/setup-raspi.md) |
+| 試し方 | `python3 vision/vision.py`、`python3 tools/check_vision.py vision/vision.py` |
 
-純正カメラを使う picamera2 は apt で入れるものなので、仮想環境は `--system-site-packages` 付きで作ります。
+- 本体のファイルは import しません。PROTOCOL.md の約束さえ守れば、中身は自由に作り替えてかまいません
 
-```
-sudo apt install -y python3-picamera2
-python3 -m venv --system-site-packages ~/hanger-venv
-source ~/hanger-venv/bin/activate
-pip install -r body/requirements.txt -r vision/requirements.txt
-```
+### モーター担当
 
-USB カメラを使うときは、`vision/vision.py` の `CAMERA` を `"usb"` にします。
+| 主に触るファイル | `esp32/hanger_esp32/motor.cpp/.h`、`pins.h`（自分のピンを書き足す） |
+|---|---|
+| まず読む | [docs/setup-esp32.md](docs/setup-esp32.md)、[docs/esp32-commands.md](docs/esp32-commands.md) |
+| 試し方 | `esp32/tests/drying_motor_test/` で単体で動かし、動いたら `motor.cpp` に移す |
 
-### 2. 動かす
+- `motorGet(番号)` と `motorPut(番号, 肩幅)` の中身を、LED からモーターに置き換えます
+- GPIO4・GPIO5 は重量計測で使うので、使いません
 
-```
-python3 run.py
-```
+### 重量計測担当
 
-最初は `body/config.py` の `VISION_FILE` が仮の画像処理（tools/fake_vision.py）になっています。
-`reg` や `face` を打つと「カメラの前にいる人の名前」を聞いてくるので、名前を入れて試します。
-本物を使うときは `VISION_FILE = HERE.parent / "vision" / "vision.py"` にします。
+| 主に触るファイル | `esp32/hanger_esp32/weight.cpp/.h`、`pins.h`（GPIO4・5 を書く） |
+|---|---|
+| まず読む | [docs/setup-esp32.md](docs/setup-esp32.md) |
+| 試し方 | `esp32/tests/` に自分用のスケッチを作って単体で動かし、動いたら `weight.cpp` に移す |
 
-### 3. 画像処理担当の確認
+- 乾燥が完了したら `weightDryingComplete()` が `true` を返すようにします
+- 乾燥完了をラズパイに知らせる命令はまだありません。作るときはチームで決めます
 
-```
-python3 vision/vision.py                          ← 1 回測って結果を表示
-python3 vision/vision.py calib 42.0               ← 肩幅 42.0cm の人で校正
-python3 tools/check_vision.py vision/vision.py    ← 約束どおりか確認
-```
+---
 
-### 4. YOLO を速くする（必要なら）
+## 知りたいこと別に見るところ
 
-ラズパイ5の CPU だと、そのままの YOLO は少し遅めです。測定が時間切れになるときは NCNN 形式に変換します。
+| 知りたいこと | 見るところ |
+|---|---|
+| チームでの作業の進め方（ブランチ・PR） | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| ほかの人と同時に作業するときの決まり・コンフリクトの直し方 | [CONTRIBUTING.md](CONTRIBUTING.md) の「並行して作業するとき」 |
+| PR を出す前に確かめること | [CONTRIBUTING.md](CONTRIBUTING.md) の「PR を出す前の確認」 |
+| 誰がどのファイルの担当か | [CONTRIBUTING.md](CONTRIBUTING.md) の「担当」 |
+| `reg` や `face` を打ったとき、何がどの順で動くか | [FLOW.md](FLOW.md) |
+| 画像処理が何を受け取り、何を返せばいいか | [PROTOCOL.md](PROTOCOL.md) |
+| ラズパイから ESP32 に送る命令と返事 | [docs/esp32-commands.md](docs/esp32-commands.md) |
+| ESP32 のどのピンが空いているか | `esp32/hanger_esp32/pins.h` |
+| ハンガーの数を変えたい | `body/config.py` と `esp32/hanger_esp32/bt_command.h` の `HANGER_COUNT`（両方同じ値に。全員で相談） |
+| 仮の画像処理 ⇔ 本物を切り替えたい | `body/config.py` の `VISION_FILE`（手元だけで変え、コミットしない） |
+| 機械なし ⇔ ESP32 につなぐを切り替えたい | `body/config.py` の `MACHINE_MODE`（手元だけで変え、コミットしない） |
+| 肩幅が正しく出ない | [docs/setup-raspi.md](docs/setup-raspi.md) の「画像処理を確かめる」（校正） |
+| 測定が遅い・時間切れになる | [docs/setup-raspi.md](docs/setup-raspi.md) の「YOLO を速くする」 |
+| ESP32 につながらない | [docs/setup-esp32.md](docs/setup-esp32.md) の「本体から使う」の表 |
+| ESP32 に書き込む方法 | [docs/setup-esp32.md](docs/setup-esp32.md) の「スケッチを書き込む」 |
+| 登録データがどこにあるか | `body/data/people.json`（個人情報。Git には入れない） |
 
-```
-yolo export model=yolo11n-pose.pt format=ncnn
-```
+---
 
-できたフォルダ名（`yolo11n-pose_ncnn_model`）を `vision/vision.py` の `POSE_MODEL` に入れます。
+## 今の状態
 
-## ESP32 の準備（ラズパイ5 ⇔ ESP32）
-
-今は **最小構成** です。Arduino は使わず、ハンガー側は無印 ESP32 だけで、命令を受け取ったら返事をしてボード上の LED を光らせます。モーターは、スケッチの `doGet` / `doPut` に後から足します。
-
-Bluetooth Classic を使うので、**無印 ESP32**（ESP32-WROVER / ESP32-WROOM-32 など。S3 や C3 ではないもの）が必要です。
-
-### 1. スケッチの書き込み
-
-1. Arduino IDE のボードマネージャで「esp32 by Espressif Systems」を入れる
-2. ボードは WROVER なら「ESP32 Wrover Module」、WROOM なら「ESP32 Dev Module」を選ぶ（ポートが出ないときは USB 変換チップのドライバーを入れる）
-3. `esp32/hanger_esp32/hanger_esp32.ino` を書き込む
-4. シリアルモニタ（115200bps）に `[BT] 待ち受け開始: HANGER-ESP32` と出れば OK
-
-### 2. ラズパイとペアリングしてポートを作る
-
-ESP32 は「HANGER-ESP32」という名前で見えます。
-
-```
-bluetoothctl
-  power on
-  scan on                  ← 「HANGER-ESP32」と出たらアドレス（xx:xx:xx:xx:xx:xx）をメモ
-  scan off
-  pair xx:xx:xx:xx:xx:xx   ← PIN や確認を聞かれたら、1234 を入れるか yes と答える
-  trust xx:xx:xx:xx:xx:xx
-  quit
-
-sudo rfcomm bind 0 xx:xx:xx:xx:xx:xx 1     ← /dev/rfcomm0 ができる
-sudo usermod -aG dialout $USER             ← sudo なしで使えるようにする（一度ログアウト）
-```
-
-`rfcomm bind` は再起動すると消えます。毎回自動でやるなら、次の内容で `/etc/systemd/system/rfcomm0.service` を作り、`sudo systemctl enable --now rfcomm0` します。
-
-```
-[Unit]
-Description=ESP32 rfcomm0
-After=bluetooth.service
-Requires=bluetooth.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/bin/rfcomm bind 0 xx:xx:xx:xx:xx:xx 1
-ExecStop=/usr/bin/rfcomm release 0
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### 3. 通信だけを試す
-
-```
-python3 tools/bt_test.py
-```
-
-つながると自動で `PING` を送り、`← PONG` と出ます。続けて `GET:3` と打つと `← OK:GET:3` が返り、ESP32 の LED が3回点滅します。`PUT:3:42.5` なら LED が1秒点きます。
-
-### 4. 本体から使う
-
-`body/config.py` の `MACHINE_MODE` を `"bt"` にして `python3 run.py` で起動します。
-
-| 起動時の表示 | 状態 | 確認するところ |
-|---|---|---|
-| `/dev/rfcomm0 で ESP32 につながりました` | つながった | ― |
-| `ESP32 にはつながりましたが PONG が返りません` | Bluetooth はつながったが、スケッチが返事をしない | `hanger_esp32.ino` が書き込まれているか |
-| `ESP32 につながりません` | Bluetooth がつながらない | ESP32 の電源、ペアリング、`rfcomm bind` |
-
-### 通信の決まり（ラズパイ ↔ ESP32）
-
-- ラズパイ → ESP32：`PING` / `GET:3` / `PUT:3:42.5`（1行1命令）
-- ESP32 → ラズパイ：`PONG` / `OK:<命令>` / `ERR:<理由>:<命令>`。それ以外の行は読み捨てるので、デバッグ表示を混ぜても大丈夫です
-- 切れたら自動でつなぎ直します。まだ送れていない命令は、つながってから送ります
-- 送ったのに `OK` が来ない命令は送り直しません（届いていた場合、2回動いてしまうため）。警告だけ出します
-- `HANGER_COUNT` は `body/config.py` と ESP32 のスケッチで同じ値にしてください
-
-## 前の版のデータについて
-
-第1版の `data/people.json` は読み込めますが、顔の形が変わったため、顔での呼び出しには使えません（名前での呼び出しはできます）。画像処理が「〇人分の顔は今の方式と違う」と知らせるので、その人は登録し直してください。
+| 部分 | 状態 |
+|---|---|
+| 本体（`body/`） | 6 つのコマンドが動く。仮の画像処理と「表示だけの機械」で動作確認済み |
+| 画像処理（`vision/`） | 見本はある。ラズパイ実機・カメラでの確認はまだ。肩幅の換算値（`CM_PER_PX`）は仮 |
+| ESP32 の命令の受け取り | できている。実機での確認はまだ |
+| モーター | まだ。今は LED で代用 |
+| 重量計測・乾燥判定 | まだ（担当者が作成中） |
+| 乾燥完了をラズパイに知らせる | まだ決まっていない |

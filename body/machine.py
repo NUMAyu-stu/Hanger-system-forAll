@@ -3,7 +3,8 @@
 #
 # つながり方
 #   ラズパイ5 ──Bluetooth Classic（SPP）──▶ ESP32（無印）
-#   ラズパイからは ESP32 が /dev/rfcomm0 というシリアルポートに見える（README 参照）。
+#   ラズパイからは ESP32 が /dev/rfcomm0 というシリアルポートに見える（docs/setup-esp32.md 参照）。
+#   命令の決まりは docs/esp32-commands.md。ESP32 側は esp32/hanger_esp32/bt_command.cpp。
 #
 # 送る命令（1 行 1 命令、ASCII、最後に改行）
 #   PING         → つながっているかの確認。ESP32 は PONG を返す
