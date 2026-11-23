@@ -1,0 +1,8 @@
+# 改行コードを LF にそろえる（Windows で編集してもラズパイでそのまま動くように）
+* text=auto eol=lf
+
+# バイナリ
+*.onnx binary
+*.pt binary
+*.png binary
+*.jpg binary

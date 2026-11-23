@@ -9,7 +9,7 @@
 #   list           登録状況を表示
 #   quit           終了
 #
-# 起動: hanger_system フォルダで  python3 run.py
+# 起動: リポジトリのフォルダで  python3 run.py
 #
 # 画像処理は config.VISION_FILE のファイルの measure 関数だけを使う（PROTOCOL.md）。
 # 画像処理が読み込めなくても get / del / list は使える。

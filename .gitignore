@@ -1,3 +1,13 @@
+# ===== このプロジェクト固有 =====
+# 登録データ（名前・顔の特徴量が入る個人情報。絶対にコミットしない）
+body/data/
+# モデルファイル（大きいので各自ダウンロードする）
+vision/models/*
+!vision/models/.gitkeep
+*.pt
+*.onnx
+*_ncnn_model/
+
 # ===== Python =====
 __pycache__/
 *.py[cod]
