@@ -1,0 +1,56 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# ===== C / C++ =====
+# ビルド生成物
+build/
+out/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.lib
+*.so
+*.dll
+*.pdb
+*.ilk
+
+# PlatformIO / Arduino
+.pio/
+
+# Visual Studio
+.vs/
+x64/
+x86/
+Debug/
+Release/
+*.user
+*.suo
+
+# ===== エディタ / OS =====
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ===== 秘密情報（絶対にコミットしない） =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
